@@ -1,0 +1,46 @@
+# [green] ignore per la ricerca file del launcher (fd --ignore-file).
+# Sintassi .gitignore. Modificabile a mano.
+
+# --- cache/dotfiles di tool (tutto ciò che inizia per . in genere non serve) ---
+.git/
+.cache/
+.gemini/
+.claude/
+.cave/
+.thunderbird/
+.mozilla/
+.config/
+.local/
+node_modules/
+__pycache__/
+.venv/
+venv/
+.npm/
+.cargo/
+.rustup/
+go/pkg/
+.steam/
+.var/
+# lock file office
+.~lock.*
+
+# --- estensioni spazzatura (asset, dati, lock, temp) ---
+*.webp
+*.json
+*.lock
+*.log
+*.tmp
+*.part
+*.conf
+*.ini
+*.cfg
+*.toml
+*.map
+*.min.js
+*.min.css
+*.ttf
+*.woff
+*.woff2
+*.so
+*.o
+*.pyc

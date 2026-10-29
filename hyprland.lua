@@ -42,7 +42,7 @@ local function first(...)
 end
 
 local terminal    = first("terminology", "kitty", "alacritty", "foot")
-local fileManager = first("nemo", "nautilus", "thunar", "dolphin")
+local fileManager = "dolphin"
 local browser     = first("brave", "firefox", "chromium", "google-chrome-stable", "xdg-open https://")
 local editor      = first("subl", "code", "zeditor", "gnome-text-editor", "kate", terminal .. " -e nano")
 local qs          = "qs -p " .. SHELL
@@ -95,15 +95,21 @@ hl.env("HYPRCURSOR_THEME", "Breeze_Dark_Lime")
 
 hl.env("XDG_SESSION_TYPE", "wayland")
 
--- NVIDIA (solo se il driver proprietario è caricato)
-local nv = io.open("/proc/driver/nvidia/version", "r")
-if nv then
-    nv:close()
-    hl.env("LIBVA_DRIVER_NAME", "nvidia")
-    hl.env("GBM_BACKEND", "nvidia-drm")
-    hl.env("__GLX_VENDOR_LIBRARY_NAME", "nvidia")
-    hl.env("WLR_NO_HARDWARE_CURSORS", "1")
+-- [green-patch] GPU: Intel UHD 770 per il display, NVIDIA A2000 solo compute (nessun CRTC).
+-- AQ_DRM_DEVICES va impostato PRIMA di Hyprland (lo fa `theme-switch test`/launcher);
+-- qui è solo un fallback dinamico, l'indice cardN cambia tra boot. MAI puntare NVIDIA (kernel hang).
+if not os.getenv("AQ_DRM_DEVICES") then
+    for i = 0, 3 do
+        local v = io.open("/sys/class/drm/card" .. i .. "/device/vendor", "r")
+        if v then
+            local id = v:read("*l"); v:close()
+            if id == "0x8086" then hl.env("AQ_DRM_DEVICES", "/dev/dri/card" .. i); break end
+        end
+    end
 end
+hl.env("__GLX_VENDOR_LIBRARY_NAME", "nvidia")
+hl.env("WLR_NO_HARDWARE_CURSORS", "1")
+-- niente GBM_BACKEND=nvidia-drm, niente LIBVA_DRIVER_NAME=nvidia (rotto su questo hardware)
 
 -- GTK (niente GTK_THEME: lascia fare a nwg-look)
 hl.env("GTK_USE_PORTAL", "1")
@@ -112,7 +118,7 @@ hl.env("GTK_USE_PORTAL", "1")
 hl.env("QT_QPA_PLATFORM", "wayland;xcb")
 hl.env("QT_WAYLAND_DISABLE_WINDOWDECORATION", "1")
 hl.env("QT_AUTO_SCREEN_SCALE_FACTOR", "1")
-hl.env("QT_QPA_PLATFORMTHEME", "qt5ct")
+hl.env("QT_QPA_PLATFORMTHEME", "qt6ct") -- [green-patch-qt6] dolphin/app Qt6 dark
 
 -- Electron
 hl.env("ELECTRON_OZONE_PLATFORM_HINT", "auto")
@@ -255,7 +261,7 @@ hl.config({
     },
 
     input = {
-        kb_layout     = "us",
+        kb_layout     = "it",
         kb_variant    = "",
         kb_model      = "",
         kb_options    = "",
@@ -315,14 +321,22 @@ local mainMod = "SUPER"
 
 -- ── Shell ──
 hl.bind("grave",                        shell("launcher"))
+hl.bind(mainMod .. " + SPACE",          hl.dsp.exec_cmd("env GTK_THEME=Adwaita:dark fsearch")) -- [green-patch-space] ricerca file
+hl.bind(mainMod .. " + SHIFT + SPACE",  hl.dsp.exec_cmd("recoll")) -- [green-patch-recoll] full-text documenti
 hl.bind(mainMod .. " + D",              shell("launcher"))
+hl.bind(mainMod .. " + Q",              shell("launcher"))
 hl.bind(mainMod .. " + Z",              shell("clipboard"))
 hl.bind(mainMod .. " + X",              shell("commands"))
-hl.bind(mainMod .. " + N",              shell("notifications"))
-hl.bind(mainMod .. " + SHIFT + N",      shell("dnd"))
-hl.bind(mainMod .. " + A",              shell("control"))
+-- [green-patch-remap] N->night mode (come green-hyprtheme), notifiche/dnd su CTRL
+hl.bind(mainMod .. " + N",              hl.dsp.exec_cmd("bash -c 'pkill hyprsunset; hyprsunset -t 4500 &'"))
+hl.bind(mainMod .. " + SHIFT + N",      hl.dsp.exec_cmd("pkill hyprsunset || true"))
+hl.bind(mainMod .. " + CTRL + N",       shell("notifications"))
+hl.bind(mainMod .. " + CTRL + SHIFT + N", shell("dnd"))
+hl.bind(mainMod .. " + CTRL + A",       shell("control"))
+hl.bind(mainMod .. " + A",              hl.dsp.exec_cmd("pavucontrol"))
 hl.bind(mainMod .. " + escape",         shell("session"))
-hl.bind(mainMod .. " + W",              shell("wallpaper"))
+-- [green-patch-remap] W->close (era K), wallpaper->CTRL+W (era W), Q alias launcher
+hl.bind(mainMod .. " + CTRL + W",       shell("wallpaper"))
 hl.bind(mainMod .. " + I",              shell("ai"))
 hl.bind(mainMod .. " + comma",          shell("settings"))
 -- Riavvia la shell (come nella vecchia config): chiude l'istanza e la rilancia
@@ -346,11 +360,12 @@ hl.bind(mainMod .. " + SHIFT + B", hl.dsp.exec_cmd(browser))
 hl.bind(mainMod .. " + SHIFT + C", hl.dsp.exec_cmd(editor))
 
 -- ── Finestre ──
-hl.bind(mainMod .. " + K",         hl.dsp.window.close())
+hl.bind(mainMod .. " + W",         hl.dsp.window.close())
 hl.bind(mainMod .. " + V",         hl.dsp.window.float({ action = "toggle" }))
 hl.bind(mainMod .. " + F",         hl.dsp.window.fullscreen({ mode = "maximized" }))
 hl.bind(mainMod .. " + SHIFT + F", hl.dsp.window.fullscreen({ mode = "fullscreen" }))
-hl.bind(mainMod .. " + P",         hl.dsp.window.pin())
+-- [green-patch-swap] P<->SHIFT+P: P=hyprpicker (green), pin spostato su SHIFT+P
+hl.bind(mainMod .. " + SHIFT + P", hl.dsp.window.pin())
 hl.bind(mainMod .. " + J",         hl.dsp.layout("togglesplit"))
 
 -- Opacità della singola finestra (prima era "toggleopaque")
@@ -425,7 +440,7 @@ local shotArea = 'g=$(slurp) && sleep 0.05 && grim -g "$g" - | swappy -f -'
 hl.bind("F1",                       hl.dsp.exec_cmd(shotArea))
 hl.bind("Print",                    hl.dsp.exec_cmd(shotArea))
 hl.bind("SHIFT + Print",            hl.dsp.exec_cmd("grim - | swappy -f -"))
-hl.bind(mainMod .. " + SHIFT + P",  hl.dsp.exec_cmd("hyprpicker -a"))
+hl.bind(mainMod .. " + P",         hl.dsp.exec_cmd("hyprpicker -a"))
 
 -- ── Resize (submap nativa Lua: SUPER+R, frecce/HJKL, Esc o Invio per uscire) ──
 hl.bind(mainMod .. " + R", hl.dsp.submap("resize"))
@@ -523,3 +538,11 @@ hl.layer_rule({ name = "no-anim-selection", match = { namespace = "^(selection|h
 
 -- Niente shell nelle condivisioni schermo
 hl.layer_rule({ name = "shell-noshare", match = { namespace = "^whiterabbit-(notifications|polkit)$" }, no_screen_share = true })
+
+-- [green-patch-binds] portati da green-hyprtheme/keybindings.lua
+-- F1/Print/SHIFT+Print/CTRL+L: rabbit ha già il suo bind nativo con stesso risultato (screenshot/lock), non duplicare
+hl.bind(mainMod .. " + F12", hl.dsp.exec_cmd("bash $HOME/green-hyprtheme/rofi/scripts/rofi-scratchpad.sh"))
+hl.bind(mainMod .. " + F9", hl.dsp.exec_cmd("~/.local/bin/zoom-share-reset"))
+hl.bind(mainMod .. " + F2", hl.dsp.exec_cmd("bash $HOME/green-hyprtheme/rofi/scripts/rofi-cheatsheet.sh"))
+hl.bind(mainMod .. " + SHIFT + L", function() hl.clear_crashed_lockscreen() end)
+-- night mode: vedi SUPER+N / SUPER+SHIFT+N nella sezione Shell (come green-hyprtheme)

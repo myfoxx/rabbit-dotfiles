@@ -1,0 +1,53 @@
+#!/bin/bash
+# dotup — aggiorna ~/my-dotfiles senza perdere le customizzazioni locali.
+#   git stash -> git pull --ff-only -> git stash pop -> theme-switch patch -> verifica Lua
+# Le patch (tasti, kb it, night mode, GPU, hibernate) sono ri-applicate da theme-switch (idempotente).
+set -uo pipefail
+RABBIT="$HOME/my-dotfiles"
+cd "$RABBIT" || { echo "✗ manca $RABBIT"; exit 1; }
+
+say()  { printf '\033[1;32m==>\033[0m %s\n' "$*"; }
+warn() { printf '\033[1;33m!!\033[0m %s\n' "$*"; }
+err()  { printf '\033[1;31m✗\033[0m %s\n' "$*"; }
+
+# 1. mod locali da mettere da parte?
+STASHED=0
+if ! git diff --quiet || ! git diff --cached --quiet; then
+    say "Metto da parte le modifiche locali (stash)…"
+    git stash push -u -m "dotup $(date +%F_%H%M)" >/dev/null && STASHED=1 || { err "stash fallito"; exit 1; }
+fi
+
+# 2. pull fast-forward
+say "Scarico aggiornamenti (git pull --ff-only)…"
+if ! git pull --ff-only; then
+    err "pull non fast-forward (storia divergente)."
+    [ "$STASHED" = 1 ] && { warn "ripristino le tue modifiche (stash pop)"; git stash pop; }
+    err "Risolvi a mano: cd ~/my-dotfiles && git status"
+    exit 1
+fi
+
+# 3. ripristino mod locali
+if [ "$STASHED" = 1 ]; then
+    say "Ripristino le modifiche locali (stash pop)…"
+    if ! git stash pop; then
+        err "CONFLITTO nel ripristino. Le tue modifiche sono salve in: git stash list"
+        err "Risolvi i file in conflitto, poi: git add <file> && git stash drop"
+        exit 1
+    fi
+fi
+
+# 4. ri-applico le patch (tasti, kb it, night, GPU, hibernate)
+say "Ri-applico le customizzazioni (theme-switch patch)…"
+theme-switch patch || { err "theme-switch patch ha dato errore"; exit 1; }
+
+# 5. verifica sintassi Lua
+if command -v luac >/dev/null 2>&1; then
+    if luac -p "$RABBIT/hyprland.lua" 2>/dev/null; then
+        say "hyprland.lua: sintassi OK"
+    else
+        err "hyprland.lua: ERRORE SINTASSI LUA — controlla prima di ricaricare!"
+        exit 1
+    fi
+fi
+
+say "Fatto. Se la sessione rabbit è attiva, ricarica con: theme-switch rabbit  (o relogin)"

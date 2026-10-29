@@ -1,0 +1,8 @@
+[Unit]
+Description=recoll full-text index update (documenti)
+
+[Service]
+Type=oneshot
+Nice=15
+IOSchedulingClass=idle
+ExecStart=/usr/bin/recollindex
