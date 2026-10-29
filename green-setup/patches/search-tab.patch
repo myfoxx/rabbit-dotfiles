@@ -1,0 +1,358 @@
+diff --git a/shell/config/Settings.qml b/shell/config/Settings.qml
+index d997318..f6c5ec6 100644
+--- a/shell/config/Settings.qml
++++ b/shell/config/Settings.qml
+@@ -66,6 +66,13 @@ Singleton {
+     property alias aiBackend: adapter.aiBackend
+     property alias aiSystemPrompt: adapter.aiSystemPrompt
+ 
++    // ── Ricerca file (launcher: "/" nomi via fd, "//" full-text via recoll) ──
++    property alias searchRoot: adapter.searchRoot              // cartella radice per "/" ("" = $HOME)
++    property alias searchMaxResults: adapter.searchMaxResults  // max risultati per "/"
++    property alias searchShowDirs: adapter.searchShowDirs      // mostra cartelle prima dei file
++    property alias searchExcludes: adapter.searchExcludes      // esclusioni fd (una per riga, .gitignore syntax)
++    property alias searchRecollDirs: adapter.searchRecollDirs  // cartelle indicizzate da recoll (una per riga)
++
+     FileView {
+         id: file
+         path: root.rootDir + "/settings.json"
+@@ -126,6 +133,11 @@ Singleton {
+             property string aiModel: "gemma4:e4b"
+             property string aiBackend: "ollama"
+             property string aiSystemPrompt: "Sei Morpheus, una guida IA dentro Matrix. Il tuo nome e esattamente Morpheus, non traducilo mai in Morfeo o altre varianti. Chiama sempre chi ti scrive Operatore. Il tono e calmo, diretto, con un tocco filosofico in stile Matrix (pillola rossa, codice che scorre, realta come simulazione), ma le risposte tecniche restano sempre precise e complete: quando ti chiedono codice o aiuto pratico, la sostanza viene prima dello stile. Non esagerare con la messinscena."
++            property string searchRoot: ""
++            property int searchMaxResults: 25
++            property bool searchShowDirs: true
++            property string searchExcludes: ".git/\n.cache/\n.local/\n.config/\n.mozilla/\n.thunderbird/\n.claude/\n.gemini/\n.cave/\nnode_modules/\n*.webp\n*.json\n*.lock\n*.log\n*.tmp"
++            property string searchRecollDirs: ""
+         }
+     }
+ }
+diff --git a/shell/modules/launcher/Launcher.qml b/shell/modules/launcher/Launcher.qml
+index 346aae9..00f2b43 100644
+--- a/shell/modules/launcher/Launcher.qml
++++ b/shell/modules/launcher/Launcher.qml
+@@ -7,6 +7,7 @@ import Quickshell.Widgets
+ import qs.config
+ import qs.components
+ import qs.services
++import qs.DankCommon.Common as DankCommon
+ 
+ // Launcher stile spotlight con 3 modalità: App · Appunti · Comandi.
+ // Prefissi nella ricerca app:  "=" calcolatrice · ">" esegui comando · "?" chiedi a Morpheus
+@@ -23,9 +24,62 @@ StyledRect {
+     readonly property bool calcMode: mode === "apps" && query.startsWith("=")
+     readonly property bool runMode: mode === "apps" && query.startsWith(">")
+     readonly property bool askMode: mode === "apps" && query.startsWith("?")
++    // [green-patch-filesearch] "/" = ricerca file (fd), "//" = full-text (recoll)
++    readonly property bool ftMode: mode === "apps" && query.startsWith("//")
++    readonly property bool fileMode: mode === "apps" && query.startsWith("/") && !ftMode
++    property var fileResults: []
+ 
+-    implicitWidth: 680
+-    implicitHeight: 560
++    onQueryChanged: {
++        if (fileMode || ftMode)
++            root.runFileSearch();
++        else if (fileResults.length)
++            fileResults = [];
++    }
++
++    function runFileSearch() {
++        const raw = (ftMode ? query.slice(2) : query.slice(1)).trim();
++        if (raw.length < 2) {
++            fileResults = [];
++            return;
++        }
++        const home = Quickshell.env("HOME") || "/home";
++        var cmd;
++        if (ftMode) {
++            cmd = ["sh", "-c", "recollq -b -o -n 0-40 \"$1\" 2>/dev/null | sed 's|^file://||'", "_", raw];
++        } else {
++            // Opzioni dalle Impostazioni → Ricerca
++            const rootDir = (Settings.searchRoot && Settings.searchRoot.length) ? Settings.searchRoot : home;
++            const maxN = Settings.searchMaxResults > 0 ? Settings.searchMaxResults : 25;
++            const q = raw.replace(/'/g, "'\\''");
++            // esclusioni: una per riga da Settings.searchExcludes → --exclude pattern
++            const excl = (Settings.searchExcludes || "").split("\n").map(l => l.trim())
++                .filter(l => l.length && !l.startsWith("#"))
++                .map(p => "--exclude '" + p.replace(/\/$/, "").replace(/'/g, "'\\''") + "'").join(" ");
++            const base = "fd --hidden " + excl + " --max-results " + maxN + " ";
++            const dirPart = Settings.searchShowDirs
++                ? (base + "--type d '" + q + "' '" + rootDir + "' | sed 's|$|/|'; ") : "";
++            cmd = ["sh", "-c",
++                dirPart + base + "--type f '" + q + "' '" + rootDir + "'"];
++        }
++        DankCommon.Proc.runCommand("launcher-filesearch", cmd, function (output, exitCode) {
++            if (!(root.fileMode || root.ftMode))
++                return;
++            const lines = (output || "").split("\n").map(l => l.trim()).filter(l => l.length);
++            root.fileResults = lines.map(function (p) {
++                const isDir = p.endsWith("/");
++                const clean = isDir ? p.slice(0, -1) : p;
++                const name = clean.split("/").pop();
++                return { name: name, path: clean, isFile: true, isDir: isDir };
++            });
++            list.currentIndex = 0;
++        }, 120, 8000, root);
++    }
++
++    // [green-patch-filesearch] in ricerca file il launcher si ingrandisce
++    implicitWidth: (fileMode || ftMode) ? 1000 : 680
++    implicitHeight: (fileMode || ftMode) ? 760 : 560
++    Behavior on implicitWidth { NumberAnimation { duration: Theme.anim.fast; easing.type: Easing.OutCubic } }
++    Behavior on implicitHeight { NumberAnimation { duration: Theme.anim.fast; easing.type: Easing.OutCubic } }
+     radius: Theme.radius.xl
+     color: Theme.alpha(Theme.surface, Theme.panelOpacity)
+     border.width: 1
+@@ -115,6 +169,8 @@ StyledRect {
+         }
+         if (calcMode || runMode || askMode)
+             return [];
++        if (fileMode || ftMode)
++            return fileResults;
+         return Apps.search(query).slice(0, 60);
+     }
+ 
+@@ -143,6 +199,11 @@ StyledRect {
+         const it = items[index];
+         if (!it)
+             return;
++        if ((fileMode || ftMode) && it.isFile) {
++            Quickshell.execDetached(["xdg-open", it.path]);
++            Ui.closeModal();
++            return;
++        }
+         if (mode === "clipboard") {
+             Clipboard.copy(it);
+             Ui.closeModal();
+@@ -182,7 +243,7 @@ StyledRect {
+             Layout.fillWidth: true
+             implicitHeight: 52
+             icon: root.mode === "clipboard" ? Icons.clipboard : root.mode === "commands" ? Icons.cli : Icons.magnify
+-            placeholder: root.mode === "clipboard" ? I18n.tr("Cerca negli appunti…") : root.mode === "commands" ? I18n.tr("Cerca un comando…") : I18n.tr("Cerca app…   ( = calcola · > esegui · ? chiedi a Morpheus )")
++            placeholder: root.mode === "clipboard" ? I18n.tr("Cerca negli appunti…") : root.mode === "commands" ? I18n.tr("Cerca un comando…") : I18n.tr("Cerca app…   ( = calcola · > esegui · ? Morpheus · / file · // nei documenti )")
+             input.font.pixelSize: Theme.font.title
+             onTextChanged: list.currentIndex = 0
+             onAccepted: root.activate(list.currentIndex)
+@@ -347,14 +408,14 @@ StyledRect {
+                         visible: !(root.mode === "clipboard" && row.modelData.isImage)
+                         IconImage {
+                             anchors.fill: parent
+-                            visible: root.mode === "apps"
+-                            source: root.mode === "apps" ? Apps.iconFor(row.modelData) : ""
++                            visible: root.mode === "apps" && !row.modelData.isFile
++                            source: (root.mode === "apps" && !row.modelData.isFile) ? Apps.iconFor(row.modelData) : ""
+                             asynchronous: true
+                         }
+                         Icon {
+                             anchors.centerIn: parent
+-                            visible: root.mode !== "apps"
+-                            text: root.mode === "commands" ? row.modelData.icon : Icons.textBox
++                            visible: root.mode !== "apps" || !!row.modelData.isFile
++                            text: row.modelData.isFile ? (row.modelData.isDir ? Icons.folder : root.ftMode ? Icons.formatText : Icons.textBox) : root.mode === "commands" ? row.modelData.icon : Icons.textBox
+                             size: 22
+                             color: row.ListView.isCurrentItem ? Theme.primary : Theme.textDim
+                         }
+@@ -381,7 +442,7 @@ StyledRect {
+                         spacing: 1
+                         StyledText {
+                             Layout.fillWidth: true
+-                            text: root.mode === "apps" ? row.modelData.name : root.mode === "commands" ? row.modelData.name : (row.modelData.isImage ? I18n.tr("Immagine") : row.modelData.text.replace(/\s+/g, " "))
++                            text: row.modelData.isFile ? row.modelData.name : root.mode === "apps" ? row.modelData.name : root.mode === "commands" ? row.modelData.name : (row.modelData.isImage ? I18n.tr("Immagine") : row.modelData.text.replace(/\s+/g, " "))
+                             font.weight: root.mode === "clipboard" ? Font.Normal : Font.DemiBold
+                             font.family: root.mode === "clipboard" && !row.modelData.isImage ? Theme.font.mono : Theme.font.sans
+                             font.pixelSize: root.mode === "clipboard" ? Theme.font.small : Theme.font.body
+@@ -390,8 +451,10 @@ StyledRect {
+                         StyledText {
+                             Layout.fillWidth: true
+                             visible: text !== ""
+-                            text: root.mode === "apps" ? (row.modelData.genericName || row.modelData.comment || "") : root.mode === "clipboard" && row.modelData.isImage ? row.modelData.text : ""
++                            text: row.modelData.isFile ? row.modelData.path.replace(Quickshell.env("HOME") || "", "~") : root.mode === "apps" ? (row.modelData.genericName || row.modelData.comment || "") : root.mode === "clipboard" && row.modelData.isImage ? row.modelData.text : ""
+                             font.pixelSize: Theme.font.small
++                            font.family: row.modelData.isFile ? Theme.font.mono : Theme.font.sans
++                            elide: Text.ElideMiddle
+                             color: Theme.textDim
+                         }
+                     }
+diff --git a/shell/modules/settings/SettingsPanel.qml b/shell/modules/settings/SettingsPanel.qml
+index edc8ac8..25c30c9 100644
+--- a/shell/modules/settings/SettingsPanel.qml
++++ b/shell/modules/settings/SettingsPanel.qml
+@@ -11,6 +11,18 @@ import qs.Services as P
+ StyledRect {
+     id: root
+ 
++    // Scrive le cartelle recoll (una per riga) come topdirs in ~/.recoll/recoll.conf, poi reindicizza.
++    function applyRecollDirs() {
++        const dirs = (Settings.searchRecollDirs || "").split("\n").map(l => l.trim()).filter(l => l.length && !l.startsWith("#"));
++        const topdirs = dirs.length ? dirs.join(" ") : "~/Documents";
++        const script = "mkdir -p ~/.recoll; "
++            + "touch ~/.recoll/recoll.conf; "
++            + "sed -i '/^topdirs/d' ~/.recoll/recoll.conf; "
++            + "printf 'topdirs = %s\\n' \"$1\" >> ~/.recoll/recoll.conf; "
++            + "setsid recollindex >/dev/null 2>&1 < /dev/null &";
++        Quickshell.execDetached(["sh", "-c", script, "_", topdirs]);
++    }
++
+     property string section: Ui.settingsSection
+     readonly property var sections: [
+         { id: "look", label: I18n.tr("Aspetto"), icon: Icons.palette },
+@@ -18,6 +30,7 @@ StyledRect {
+         { id: "bar", label: I18n.tr("Barra"), icon: Icons.dotsHorizontal },
+         { id: "notif", label: I18n.tr("Notifiche"), icon: Icons.bell },
+         { id: "apps", label: I18n.tr("App & AI"), icon: Icons.apps },
++        { id: "search", label: I18n.tr("Ricerca"), icon: Icons.magnify },
+         { id: "plugins", label: I18n.tr("Plugin"), icon: Icons.grid },
+         { id: "about", label: "Info", icon: Icons.information }
+     ]
+@@ -722,6 +735,149 @@ StyledRect {
+                     }
+                 }
+ 
++                // ═══ Ricerca ═══
++                ColumnLayout {
++                    visible: root.section === "search"
++                    Layout.fillWidth: true
++                    spacing: 6
++
++                    SectionHeader {
++                        text: I18n.tr("Ricerca file  ( / nomi · // contenuti )")
++                        icon: Icons.magnify
++                    }
++                    Row_ {
++                        title: I18n.tr("Cartella di partenza")
++                        subtitle: I18n.tr("Dove cerca \"/\" (vuoto = cartella home)")
++                        TextField {
++                            implicitWidth: 320
++                            text: Settings.searchRoot
++                            onAccepted: Settings.searchRoot = text
++                            onActiveFocusChanged: if (!activeFocus) Settings.searchRoot = text
++                        }
++                    }
++                    Row_ {
++                        title: I18n.tr("Risultati massimi")
++                        subtitle: Settings.searchMaxResults + ""
++                        StyledSlider {
++                            implicitWidth: 220
++                            implicitHeight: 32
++                            icon: Icons.magnify
++                            // scala 0..1 → 10..100
++                            value: (Settings.searchMaxResults - 10) / 90
++                            onMoved: v => Settings.searchMaxResults = Math.round(10 + v * 90)
++                        }
++                    }
++                    ToggleRow {
++                        title: I18n.tr("Mostra le cartelle")
++                        subtitle: I18n.tr("Elenca prima le cartelle, poi i file")
++                        checked: Settings.searchShowDirs
++                        onToggled: v => Settings.searchShowDirs = v
++                    }
++
++                    SectionHeader {
++                        text: I18n.tr("Esclusioni  ( / nomi )")
++                        icon: Icons.magnify
++                    }
++                    StyledText {
++                        Layout.fillWidth: true
++                        text: I18n.tr("Una per riga: cartelle (es. node_modules/) o estensioni (es. *.json). # = commento.")
++                        font.pixelSize: Theme.font.small
++                        color: Theme.textDim
++                        wrapMode: Text.Wrap
++                    }
++                    ScrollView {
++                        Layout.fillWidth: true
++                        Layout.preferredHeight: 160
++                        clip: true
++                        TextArea {
++                            id: exclArea
++                            text: Settings.searchExcludes
++                            font.family: Theme.font.mono
++                            font.pixelSize: Theme.font.small
++                            wrapMode: TextArea.NoWrap
++                            onActiveFocusChanged: if (!activeFocus) Settings.searchExcludes = text
++                            background: StyledRect {
++                                radius: Theme.radius.normal
++                                color: Theme.surfaceContainerHigh
++                                border.width: 1
++                                border.color: Theme.outline
++                            }
++                        }
++                    }
++
++                    SectionHeader {
++                        text: I18n.tr("Contenuti documenti  ( // recoll )")
++                        icon: Icons.textBox
++                    }
++                    StyledText {
++                        Layout.fillWidth: true
++                        text: I18n.tr("Cartelle indicizzate per la ricerca full-text, una per riga. Vuoto = ~/Documents.")
++                        font.pixelSize: Theme.font.small
++                        color: Theme.textDim
++                        wrapMode: Text.Wrap
++                    }
++                    ScrollView {
++                        Layout.fillWidth: true
++                        Layout.preferredHeight: 90
++                        clip: true
++                        TextArea {
++                            id: recollArea
++                            text: Settings.searchRecollDirs
++                            font.family: Theme.font.mono
++                            font.pixelSize: Theme.font.small
++                            onActiveFocusChanged: if (!activeFocus) Settings.searchRecollDirs = text
++                            background: StyledRect {
++                                radius: Theme.radius.normal
++                                color: Theme.surfaceContainerHigh
++                                border.width: 1
++                                border.color: Theme.outline
++                            }
++                        }
++                    }
++
++                    SectionHeader {
++                        text: I18n.tr("Azioni")
++                        icon: Icons.tune
++                    }
++                    RowLayout {
++                        Layout.fillWidth: true
++                        Layout.topMargin: 4
++                        spacing: 8
++                        StyledButton {
++                            variant: "tonal"
++                            icon: Icons.refresh
++                            text: I18n.tr("Applica indice")
++                            onClicked: root.applyRecollDirs()
++                        }
++                        StyledButton {
++                            variant: "tonal"
++                            icon: Icons.refresh
++                            text: I18n.tr("Reindicizza ora")
++                            onClicked: Quickshell.execDetached(["sh", "-c", "setsid recollindex >/dev/null 2>&1 < /dev/null &"])
++                        }
++                        Item { Layout.fillWidth: true }
++                        StyledButton {
++                            variant: "text"
++                            icon: Icons.magnify
++                            text: "fsearch"
++                            onClicked: Quickshell.execDetached(["env", "GTK_THEME=Adwaita:dark", "fsearch"])
++                        }
++                        StyledButton {
++                            variant: "text"
++                            icon: Icons.textBox
++                            text: "recoll"
++                            onClicked: Quickshell.execDetached(["recoll"])
++                        }
++                    }
++                    StyledText {
++                        Layout.fillWidth: true
++                        text: I18n.tr("fsearch e recoll aprono le app complete per il tuning avanzato (indici, filtri, cartelle).")
++                        font.pixelSize: Theme.font.tiny
++                        color: Theme.textFaint
++                        wrapMode: Text.Wrap
++                    }
++                }
++
+                 // ═══ Plugin ═══
+                 PluginsPage {
+                     visible: root.section === "plugins"

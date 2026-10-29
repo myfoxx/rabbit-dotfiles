@@ -42,7 +42,7 @@ local function first(...)
 end
 
 local terminal    = first("terminology", "kitty", "alacritty", "foot")
-local fileManager = "dolphin"
+local fileManager = first("nemo", "nautilus", "thunar", "dolphin")
 local browser     = first("brave", "firefox", "chromium", "google-chrome-stable", "xdg-open https://")
 local editor      = first("subl", "code", "zeditor", "gnome-text-editor", "kate", terminal .. " -e nano")
 local qs          = "qs -p " .. SHELL
@@ -327,7 +327,7 @@ hl.bind(mainMod .. " + D",              shell("launcher"))
 hl.bind(mainMod .. " + Q",              shell("launcher"))
 hl.bind(mainMod .. " + Z",              shell("clipboard"))
 hl.bind(mainMod .. " + X",              shell("commands"))
--- [green-patch-remap] N->night mode (come green-hyprtheme), notifiche/dnd su CTRL
+-- [green-patch-night] N->night mode (come green), notifiche/dnd su CTRL
 hl.bind(mainMod .. " + N",              hl.dsp.exec_cmd("bash -c 'pkill hyprsunset; hyprsunset -t 4500 &'"))
 hl.bind(mainMod .. " + SHIFT + N",      hl.dsp.exec_cmd("pkill hyprsunset || true"))
 hl.bind(mainMod .. " + CTRL + N",       shell("notifications"))
@@ -543,6 +543,6 @@ hl.layer_rule({ name = "shell-noshare", match = { namespace = "^whiterabbit-(not
 -- F1/Print/SHIFT+Print/CTRL+L: rabbit ha già il suo bind nativo con stesso risultato (screenshot/lock), non duplicare
 hl.bind(mainMod .. " + F12", hl.dsp.exec_cmd("bash $HOME/green-hyprtheme/rofi/scripts/rofi-scratchpad.sh"))
 hl.bind(mainMod .. " + F9", hl.dsp.exec_cmd("~/.local/bin/zoom-share-reset"))
-hl.bind(mainMod .. " + F2", hl.dsp.exec_cmd("bash $HOME/green-hyprtheme/rofi/scripts/rofi-cheatsheet.sh"))
 hl.bind(mainMod .. " + SHIFT + L", function() hl.clear_crashed_lockscreen() end)
 -- night mode: vedi SUPER+N / SUPER+SHIFT+N nella sezione Shell (come green-hyprtheme)
+hl.bind(mainMod .. " + F2", hl.dsp.exec_cmd("bash $HOME/green-hyprtheme/rofi/scripts/rofi-cheatsheet.sh"))

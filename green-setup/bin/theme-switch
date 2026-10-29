@@ -181,164 +181,23 @@ PY
 #   "/" = file per nome (fd)   "//" = full-text nei documenti (recoll)
 # Patch idempotente su shell/modules/launcher/Launcher.qml (file versionato upstream -> dotup lo ripristina).
 patch_launcher_filesearch() {
+    # Applica ricerca-file nel launcher + tab "Ricerca" nelle impostazioni.
+    # Un solo patch-diff (green-setup/patches/search-tab.patch) invece di decine di string-replace:
+    # tocca shell/{config/Settings.qml, modules/launcher/Launcher.qml, modules/settings/SettingsPanel.qml}.
+    local P="$RABBIT/green-setup/patches/search-tab.patch"
     local L="$RABBIT/shell/modules/launcher/Launcher.qml"
     [ -f "$L" ] || { echo "launcher: $L assente, salto"; return 0; }
-    if grep -q "green-patch-filesearch" "$L"; then
-        echo "launcher: ricerca file già presente"
+    if grep -q "searchExcludes" "$L" 2>/dev/null; then
+        echo "launcher+tab ricerca: già presenti"
         return 0
     fi
-    python3 - "$L" <<'PY'
-import sys
-p=sys.argv[1]; s=open(p).read()
-orig=s
-
-# 1. import Proc + commento
-s=s.replace(
-"""import qs.config
-import qs.components
-import qs.services
-""",
-"""import qs.config
-import qs.components
-import qs.services
-import qs.DankCommon.Common as DankCommon
-""",1)
-
-# 2. props + logica async (dopo askMode)
-s=s.replace(
-'    readonly property bool askMode: mode === "apps" && query.startsWith("?")\n',
-'''    readonly property bool askMode: mode === "apps" && query.startsWith("?")
-    // [green-patch-filesearch] "/" = ricerca file (fd), "//" = full-text (recoll)
-    readonly property bool ftMode: mode === "apps" && query.startsWith("//")
-    readonly property bool fileMode: mode === "apps" && query.startsWith("/") && !ftMode
-    property var fileResults: []
-
-    onQueryChanged: {
-        if (fileMode || ftMode)
-            root.runFileSearch();
-        else if (fileResults.length)
-            fileResults = [];
-    }
-
-    function runFileSearch() {
-        const raw = (ftMode ? query.slice(2) : query.slice(1)).trim();
-        if (raw.length < 2) {
-            fileResults = [];
-            return;
-        }
-        const home = Quickshell.env("HOME") || "/home";
-        var cmd;
-        if (ftMode) {
-            cmd = ["sh", "-c", "recollq -b -o -n 0-40 \\"$1\\" 2>/dev/null | sed 's|^file://||'", "_", raw];
-        } else {
-            const ign = home + "/.config/launcher-fdignore";
-            const q = raw.replace(/'/g, "'\\\\''");
-            const base = "I='" + ign + "'; FD='fd --hidden --max-results 25'; [ -f \\"$I\\" ] && FD=\\"$FD --ignore-file $I\\"; ";
-            cmd = ["sh", "-c",
-                base + "$FD --type d '" + q + "' '" + home + "' | sed 's|$|/|'; " +
-                "$FD --type f '" + q + "' '" + home + "'"];
-        }
-        DankCommon.Proc.runCommand("launcher-filesearch", cmd, function (output, exitCode) {
-            if (!(root.fileMode || root.ftMode))
-                return;
-            const lines = (output || "").split("\\n").map(l => l.trim()).filter(l => l.length);
-            root.fileResults = lines.map(function (p) {
-                const isDir = p.endsWith("/");
-                const clean = isDir ? p.slice(0, -1) : p;
-                const name = clean.split("/").pop();
-                return { name: name, path: clean, isFile: true, isDir: isDir };
-            });
-            list.currentIndex = 0;
-        }, 120, 8000, root);
-    }
-''',1)
-
-# 3. items -> file
-s=s.replace(
-'''        if (calcMode || runMode || askMode)
-            return [];
-        return Apps.search(query).slice(0, 60);''',
-'''        if (calcMode || runMode || askMode)
-            return [];
-        if (fileMode || ftMode)
-            return fileResults;
-        return Apps.search(query).slice(0, 60);''',1)
-
-# 4. activate -> xdg-open
-s=s.replace(
-'''        const it = items[index];
-        if (!it)
-            return;
-        if (mode === "clipboard") {''',
-'''        const it = items[index];
-        if (!it)
-            return;
-        if ((fileMode || ftMode) && it.isFile) {
-            Quickshell.execDetached(["xdg-open", it.path]);
-            Ui.closeModal();
-            return;
-        }
-        if (mode === "clipboard") {''',1)
-
-# 5. delegate icona
-s=s.replace(
-'''                        IconImage {
-                            anchors.fill: parent
-                            visible: root.mode === "apps"
-                            source: root.mode === "apps" ? Apps.iconFor(row.modelData) : ""
-                            asynchronous: true
-                        }
-                        Icon {
-                            anchors.centerIn: parent
-                            visible: root.mode !== "apps"
-                            text: root.mode === "commands" ? row.modelData.icon : Icons.textBox''',
-'''                        IconImage {
-                            anchors.fill: parent
-                            visible: root.mode === "apps" && !row.modelData.isFile
-                            source: (root.mode === "apps" && !row.modelData.isFile) ? Apps.iconFor(row.modelData) : ""
-                            asynchronous: true
-                        }
-                        Icon {
-                            anchors.centerIn: parent
-                            visible: root.mode !== "apps" || !!row.modelData.isFile
-                            text: row.modelData.isFile ? (row.modelData.isDir ? Icons.folder : root.ftMode ? Icons.formatText : Icons.textBox) : root.mode === "commands" ? row.modelData.icon : Icons.textBox''',1)
-
-# 6. titolo delegate
-s=s.replace(
-'''                            text: root.mode === "apps" ? row.modelData.name : root.mode === "commands" ? row.modelData.name : (row.modelData.isImage ? I18n.tr("Immagine") : row.modelData.text.replace(/\\s+/g, " "))''',
-'''                            text: row.modelData.isFile ? row.modelData.name : root.mode === "apps" ? row.modelData.name : root.mode === "commands" ? row.modelData.name : (row.modelData.isImage ? I18n.tr("Immagine") : row.modelData.text.replace(/\\s+/g, " "))''',1)
-
-# 7. sottotitolo delegate = path
-s=s.replace(
-'''                            text: root.mode === "apps" ? (row.modelData.genericName || row.modelData.comment || "") : root.mode === "clipboard" && row.modelData.isImage ? row.modelData.text : ""
-                            font.pixelSize: Theme.font.small
-                            color: Theme.textDim''',
-'''                            text: row.modelData.isFile ? row.modelData.path.replace(Quickshell.env("HOME") || "", "~") : root.mode === "apps" ? (row.modelData.genericName || row.modelData.comment || "") : root.mode === "clipboard" && row.modelData.isImage ? row.modelData.text : ""
-                            font.pixelSize: Theme.font.small
-                            font.family: row.modelData.isFile ? Theme.font.mono : Theme.font.sans
-                            elide: Text.ElideMiddle
-                            color: Theme.textDim''',1)
-
-# 7b. launcher più grande in file-mode
-s=s.replace(
-'''    implicitWidth: 680
-    implicitHeight: 560''',
-'''    // [green-patch-filesearch] in ricerca file il launcher si ingrandisce
-    implicitWidth: (fileMode || ftMode) ? 1000 : 680
-    implicitHeight: (fileMode || ftMode) ? 760 : 560
-    Behavior on implicitWidth { NumberAnimation { duration: Theme.anim.fast; easing.type: Easing.OutCubic } }
-    Behavior on implicitHeight { NumberAnimation { duration: Theme.anim.fast; easing.type: Easing.OutCubic } }''',1)
-
-# 8. placeholder hint
-s=s.replace(
-'I18n.tr("Cerca app…   ( = calcola · > esegui · ? chiedi a Morpheus )")',
-'I18n.tr("Cerca app…   ( = calcola · > esegui · ? Morpheus · / file · // nei documenti )")',1)
-
-if s==orig:
-    sys.exit("launcher: nessuna sostituzione applicata (upstream cambiato?)")
-open(p,'w').write(s)
-print("Launcher.qml: ricerca file integrata (/ fd, // recoll)")
-PY
+    [ -f "$P" ] || { echo "launcher: patch $P assente, salto (ricerca file non applicata)"; return 0; }
+    if git -C "$RABBIT" apply --check "$P" 2>/dev/null; then
+        git -C "$RABBIT" apply "$P" && echo "launcher+tab ricerca: patch applicata (/ fd, // recoll, tab Impostazioni)"
+    else
+        echo "!! launcher: la patch ricerca NON si applica pulita (upstream Launcher/Settings cambiato?)."
+        echo "   Rigenera: cd $RABBIT && git diff shell/config/Settings.qml shell/modules/launcher/Launcher.qml shell/modules/settings/SettingsPanel.qml > green-setup/patches/search-tab.patch"
+    fi
 }
 
 link_to() {

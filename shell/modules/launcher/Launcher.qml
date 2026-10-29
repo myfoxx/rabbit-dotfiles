@@ -24,7 +24,11 @@ StyledRect {
     readonly property bool calcMode: mode === "apps" && query.startsWith("=")
     readonly property bool runMode: mode === "apps" && query.startsWith(">")
     readonly property bool askMode: mode === "apps" && query.startsWith("?")
+<<<<<<< Updated upstream
     // Ricerca file: "/" = nome file (fd), "//" = full-text nei documenti (recoll)
+=======
+    // [green-patch-filesearch] "/" = ricerca file (fd), "//" = full-text (recoll)
+>>>>>>> Stashed changes
     readonly property bool ftMode: mode === "apps" && query.startsWith("//")
     readonly property bool fileMode: mode === "apps" && query.startsWith("/") && !ftMode
     property var fileResults: []
@@ -47,6 +51,7 @@ StyledRect {
         if (ftMode) {
             cmd = ["sh", "-c", "recollq -b -o -n 0-40 \"$1\" 2>/dev/null | sed 's|^file://||'", "_", raw];
         } else {
+<<<<<<< Updated upstream
             // fd: prima le CARTELLE poi i FILE. Blacklist opzionale da ~/.config/launcher-fdignore
             // (sintassi .gitignore: cartelle/estensioni da escludere); usata solo se il file esiste.
             const ign = home + "/.config/launcher-fdignore";
@@ -55,6 +60,21 @@ StyledRect {
             cmd = ["sh", "-c",
                 base + "$FD --type d '" + q + "' '" + home + "' | sed 's|$|/|'; " +
                 "$FD --type f '" + q + "' '" + home + "'"];
+=======
+            // Opzioni dalle Impostazioni → Ricerca
+            const rootDir = (Settings.searchRoot && Settings.searchRoot.length) ? Settings.searchRoot : home;
+            const maxN = Settings.searchMaxResults > 0 ? Settings.searchMaxResults : 25;
+            const q = raw.replace(/'/g, "'\\''");
+            // esclusioni: una per riga da Settings.searchExcludes → --exclude pattern
+            const excl = (Settings.searchExcludes || "").split("\n").map(l => l.trim())
+                .filter(l => l.length && !l.startsWith("#"))
+                .map(p => "--exclude '" + p.replace(/\/$/, "").replace(/'/g, "'\\''") + "'").join(" ");
+            const base = "fd --hidden " + excl + " --max-results " + maxN + " ";
+            const dirPart = Settings.searchShowDirs
+                ? (base + "--type d '" + q + "' '" + rootDir + "' | sed 's|$|/|'; ") : "";
+            cmd = ["sh", "-c",
+                dirPart + base + "--type f '" + q + "' '" + rootDir + "'"];
+>>>>>>> Stashed changes
         }
         DankCommon.Proc.runCommand("launcher-filesearch", cmd, function (output, exitCode) {
             if (!(root.fileMode || root.ftMode))
@@ -70,7 +90,11 @@ StyledRect {
         }, 120, 8000, root);
     }
 
+<<<<<<< Updated upstream
     // In modalità ricerca file il launcher si ingrandisce (path lunghi, più risultati)
+=======
+    // [green-patch-filesearch] in ricerca file il launcher si ingrandisce
+>>>>>>> Stashed changes
     implicitWidth: (fileMode || ftMode) ? 1000 : 680
     implicitHeight: (fileMode || ftMode) ? 760 : 560
     Behavior on implicitWidth { NumberAnimation { duration: Theme.anim.fast; easing.type: Easing.OutCubic } }

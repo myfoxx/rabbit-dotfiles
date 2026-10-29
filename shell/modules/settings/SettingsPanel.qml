@@ -11,6 +11,18 @@ import qs.Services as P
 StyledRect {
     id: root
 
+    // Scrive le cartelle recoll (una per riga) come topdirs in ~/.recoll/recoll.conf, poi reindicizza.
+    function applyRecollDirs() {
+        const dirs = (Settings.searchRecollDirs || "").split("\n").map(l => l.trim()).filter(l => l.length && !l.startsWith("#"));
+        const topdirs = dirs.length ? dirs.join(" ") : "~/Documents";
+        const script = "mkdir -p ~/.recoll; "
+            + "touch ~/.recoll/recoll.conf; "
+            + "sed -i '/^topdirs/d' ~/.recoll/recoll.conf; "
+            + "printf 'topdirs = %s\\n' \"$1\" >> ~/.recoll/recoll.conf; "
+            + "setsid recollindex >/dev/null 2>&1 < /dev/null &";
+        Quickshell.execDetached(["sh", "-c", script, "_", topdirs]);
+    }
+
     property string section: Ui.settingsSection
     readonly property var sections: [
         { id: "look", label: I18n.tr("Aspetto"), icon: Icons.palette },
@@ -18,6 +30,7 @@ StyledRect {
         { id: "bar", label: I18n.tr("Barra"), icon: Icons.dotsHorizontal },
         { id: "notif", label: I18n.tr("Notifiche"), icon: Icons.bell },
         { id: "apps", label: I18n.tr("App & AI"), icon: Icons.apps },
+        { id: "search", label: I18n.tr("Ricerca"), icon: Icons.magnify },
         { id: "plugins", label: I18n.tr("Plugin"), icon: Icons.grid },
         { id: "about", label: "Info", icon: Icons.information }
     ]
@@ -719,6 +732,149 @@ StyledRect {
                                 onActiveFocusChanged: if (!activeFocus) Settings.aiSystemPrompt = text
                             }
                         }
+                    }
+                }
+
+                // ═══ Ricerca ═══
+                ColumnLayout {
+                    visible: root.section === "search"
+                    Layout.fillWidth: true
+                    spacing: 6
+
+                    SectionHeader {
+                        text: I18n.tr("Ricerca file  ( / nomi · // contenuti )")
+                        icon: Icons.magnify
+                    }
+                    Row_ {
+                        title: I18n.tr("Cartella di partenza")
+                        subtitle: I18n.tr("Dove cerca \"/\" (vuoto = cartella home)")
+                        TextField {
+                            implicitWidth: 320
+                            text: Settings.searchRoot
+                            onAccepted: Settings.searchRoot = text
+                            onActiveFocusChanged: if (!activeFocus) Settings.searchRoot = text
+                        }
+                    }
+                    Row_ {
+                        title: I18n.tr("Risultati massimi")
+                        subtitle: Settings.searchMaxResults + ""
+                        StyledSlider {
+                            implicitWidth: 220
+                            implicitHeight: 32
+                            icon: Icons.magnify
+                            // scala 0..1 → 10..100
+                            value: (Settings.searchMaxResults - 10) / 90
+                            onMoved: v => Settings.searchMaxResults = Math.round(10 + v * 90)
+                        }
+                    }
+                    ToggleRow {
+                        title: I18n.tr("Mostra le cartelle")
+                        subtitle: I18n.tr("Elenca prima le cartelle, poi i file")
+                        checked: Settings.searchShowDirs
+                        onToggled: v => Settings.searchShowDirs = v
+                    }
+
+                    SectionHeader {
+                        text: I18n.tr("Esclusioni  ( / nomi )")
+                        icon: Icons.magnify
+                    }
+                    StyledText {
+                        Layout.fillWidth: true
+                        text: I18n.tr("Una per riga: cartelle (es. node_modules/) o estensioni (es. *.json). # = commento.")
+                        font.pixelSize: Theme.font.small
+                        color: Theme.textDim
+                        wrapMode: Text.Wrap
+                    }
+                    ScrollView {
+                        Layout.fillWidth: true
+                        Layout.preferredHeight: 160
+                        clip: true
+                        TextArea {
+                            id: exclArea
+                            text: Settings.searchExcludes
+                            font.family: Theme.font.mono
+                            font.pixelSize: Theme.font.small
+                            wrapMode: TextArea.NoWrap
+                            onActiveFocusChanged: if (!activeFocus) Settings.searchExcludes = text
+                            background: StyledRect {
+                                radius: Theme.radius.normal
+                                color: Theme.surfaceContainerHigh
+                                border.width: 1
+                                border.color: Theme.outline
+                            }
+                        }
+                    }
+
+                    SectionHeader {
+                        text: I18n.tr("Contenuti documenti  ( // recoll )")
+                        icon: Icons.textBox
+                    }
+                    StyledText {
+                        Layout.fillWidth: true
+                        text: I18n.tr("Cartelle indicizzate per la ricerca full-text, una per riga. Vuoto = ~/Documents.")
+                        font.pixelSize: Theme.font.small
+                        color: Theme.textDim
+                        wrapMode: Text.Wrap
+                    }
+                    ScrollView {
+                        Layout.fillWidth: true
+                        Layout.preferredHeight: 90
+                        clip: true
+                        TextArea {
+                            id: recollArea
+                            text: Settings.searchRecollDirs
+                            font.family: Theme.font.mono
+                            font.pixelSize: Theme.font.small
+                            onActiveFocusChanged: if (!activeFocus) Settings.searchRecollDirs = text
+                            background: StyledRect {
+                                radius: Theme.radius.normal
+                                color: Theme.surfaceContainerHigh
+                                border.width: 1
+                                border.color: Theme.outline
+                            }
+                        }
+                    }
+
+                    SectionHeader {
+                        text: I18n.tr("Azioni")
+                        icon: Icons.tune
+                    }
+                    RowLayout {
+                        Layout.fillWidth: true
+                        Layout.topMargin: 4
+                        spacing: 8
+                        StyledButton {
+                            variant: "tonal"
+                            icon: Icons.refresh
+                            text: I18n.tr("Applica indice")
+                            onClicked: root.applyRecollDirs()
+                        }
+                        StyledButton {
+                            variant: "tonal"
+                            icon: Icons.refresh
+                            text: I18n.tr("Reindicizza ora")
+                            onClicked: Quickshell.execDetached(["sh", "-c", "setsid recollindex >/dev/null 2>&1 < /dev/null &"])
+                        }
+                        Item { Layout.fillWidth: true }
+                        StyledButton {
+                            variant: "text"
+                            icon: Icons.magnify
+                            text: "fsearch"
+                            onClicked: Quickshell.execDetached(["env", "GTK_THEME=Adwaita:dark", "fsearch"])
+                        }
+                        StyledButton {
+                            variant: "text"
+                            icon: Icons.textBox
+                            text: "recoll"
+                            onClicked: Quickshell.execDetached(["recoll"])
+                        }
+                    }
+                    StyledText {
+                        Layout.fillWidth: true
+                        text: I18n.tr("fsearch e recoll aprono le app complete per il tuning avanzato (indici, filtri, cartelle).")
+                        font.pixelSize: Theme.font.tiny
+                        color: Theme.textFaint
+                        wrapMode: Text.Wrap
                     }
                 }
 

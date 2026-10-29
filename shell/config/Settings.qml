@@ -66,6 +66,13 @@ Singleton {
     property alias aiBackend: adapter.aiBackend
     property alias aiSystemPrompt: adapter.aiSystemPrompt
 
+    // ── Ricerca file (launcher: "/" nomi via fd, "//" full-text via recoll) ──
+    property alias searchRoot: adapter.searchRoot              // cartella radice per "/" ("" = $HOME)
+    property alias searchMaxResults: adapter.searchMaxResults  // max risultati per "/"
+    property alias searchShowDirs: adapter.searchShowDirs      // mostra cartelle prima dei file
+    property alias searchExcludes: adapter.searchExcludes      // esclusioni fd (una per riga, .gitignore syntax)
+    property alias searchRecollDirs: adapter.searchRecollDirs  // cartelle indicizzate da recoll (una per riga)
+
     FileView {
         id: file
         path: root.rootDir + "/settings.json"
@@ -126,6 +133,11 @@ Singleton {
             property string aiModel: "gemma4:e4b"
             property string aiBackend: "ollama"
             property string aiSystemPrompt: "Sei Morpheus, una guida IA dentro Matrix. Il tuo nome e esattamente Morpheus, non traducilo mai in Morfeo o altre varianti. Chiama sempre chi ti scrive Operatore. Il tono e calmo, diretto, con un tocco filosofico in stile Matrix (pillola rossa, codice che scorre, realta come simulazione), ma le risposte tecniche restano sempre precise e complete: quando ti chiedono codice o aiuto pratico, la sostanza viene prima dello stile. Non esagerare con la messinscena."
+            property string searchRoot: ""
+            property int searchMaxResults: 25
+            property bool searchShowDirs: true
+            property string searchExcludes: ".git/\n.cache/\n.local/\n.config/\n.mozilla/\n.thunderbird/\n.claude/\n.gemini/\n.cave/\nnode_modules/\n*.webp\n*.json\n*.lock\n*.log\n*.tmp"
+            property string searchRecollDirs: ""
         }
     }
 }
