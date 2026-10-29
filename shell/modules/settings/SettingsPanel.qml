@@ -866,7 +866,12 @@ StyledRect {
                             variant: "text"
                             icon: Icons.textBox
                             text: "recoll"
+<<<<<<< Updated upstream
                             onClicked: Quickshell.execDetached(["recoll"])
+=======
+                            // --disable-gpu: QtWebEngine crasha (SIGSEGV in libgallium) su GPU ibrida Wayland
+                            onClicked: Quickshell.execDetached(["env", "QTWEBENGINE_CHROMIUM_FLAGS=--disable-gpu --disable-gpu-compositing", "recoll"])
+>>>>>>> Stashed changes
                         }
                     }
                     StyledText {

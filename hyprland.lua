@@ -322,7 +322,7 @@ local mainMod = "SUPER"
 -- ── Shell ──
 hl.bind("grave",                        shell("launcher"))
 hl.bind(mainMod .. " + SPACE",          hl.dsp.exec_cmd("env GTK_THEME=Adwaita:dark fsearch")) -- [green-patch-space] ricerca file
-hl.bind(mainMod .. " + SHIFT + SPACE",  hl.dsp.exec_cmd("recoll")) -- [green-patch-recoll] full-text documenti
+hl.bind(mainMod .. " + SHIFT + SPACE",  hl.dsp.exec_cmd("env QTWEBENGINE_CHROMIUM_FLAGS=--disable-gpu recoll")) -- [green-patch-recoll] full-text documenti
 hl.bind(mainMod .. " + D",              shell("launcher"))
 hl.bind(mainMod .. " + Q",              shell("launcher"))
 hl.bind(mainMod .. " + Z",              shell("clipboard"))

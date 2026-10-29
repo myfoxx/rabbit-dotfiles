@@ -25,7 +25,11 @@ StyledRect {
     readonly property bool runMode: mode === "apps" && query.startsWith(">")
     readonly property bool askMode: mode === "apps" && query.startsWith("?")
 <<<<<<< Updated upstream
+<<<<<<< Updated upstream
     // Ricerca file: "/" = nome file (fd), "//" = full-text nei documenti (recoll)
+=======
+    // [green-patch-filesearch] "/" = ricerca file (fd), "//" = full-text (recoll)
+>>>>>>> Stashed changes
 =======
     // [green-patch-filesearch] "/" = ricerca file (fd), "//" = full-text (recoll)
 >>>>>>> Stashed changes
@@ -52,6 +56,7 @@ StyledRect {
             cmd = ["sh", "-c", "recollq -b -o -n 0-40 \"$1\" 2>/dev/null | sed 's|^file://||'", "_", raw];
         } else {
 <<<<<<< Updated upstream
+<<<<<<< Updated upstream
             // fd: prima le CARTELLE poi i FILE. Blacklist opzionale da ~/.config/launcher-fdignore
             // (sintassi .gitignore: cartelle/estensioni da escludere); usata solo se il file esiste.
             const ign = home + "/.config/launcher-fdignore";
@@ -61,6 +66,8 @@ StyledRect {
                 base + "$FD --type d '" + q + "' '" + home + "' | sed 's|$|/|'; " +
                 "$FD --type f '" + q + "' '" + home + "'"];
 =======
+=======
+>>>>>>> Stashed changes
             // Opzioni dalle Impostazioni → Ricerca
             const rootDir = (Settings.searchRoot && Settings.searchRoot.length) ? Settings.searchRoot : home;
             const maxN = Settings.searchMaxResults > 0 ? Settings.searchMaxResults : 25;
@@ -74,6 +81,9 @@ StyledRect {
                 ? (base + "--type d '" + q + "' '" + rootDir + "' | sed 's|$|/|'; ") : "";
             cmd = ["sh", "-c",
                 dirPart + base + "--type f '" + q + "' '" + rootDir + "'"];
+<<<<<<< Updated upstream
+>>>>>>> Stashed changes
+=======
 >>>>>>> Stashed changes
         }
         DankCommon.Proc.runCommand("launcher-filesearch", cmd, function (output, exitCode) {
@@ -91,7 +101,11 @@ StyledRect {
     }
 
 <<<<<<< Updated upstream
+<<<<<<< Updated upstream
     // In modalità ricerca file il launcher si ingrandisce (path lunghi, più risultati)
+=======
+    // [green-patch-filesearch] in ricerca file il launcher si ingrandisce
+>>>>>>> Stashed changes
 =======
     // [green-patch-filesearch] in ricerca file il launcher si ingrandisce
 >>>>>>> Stashed changes

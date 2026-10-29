@@ -176,7 +176,7 @@ index 346aae9..00f2b43 100644
                          }
                      }
 diff --git a/shell/modules/settings/SettingsPanel.qml b/shell/modules/settings/SettingsPanel.qml
-index edc8ac8..25c30c9 100644
+index edc8ac8..fe930a6 100644
 --- a/shell/modules/settings/SettingsPanel.qml
 +++ b/shell/modules/settings/SettingsPanel.qml
 @@ -11,6 +11,18 @@ import qs.Services as P
@@ -206,7 +206,7 @@ index edc8ac8..25c30c9 100644
          { id: "plugins", label: I18n.tr("Plugin"), icon: Icons.grid },
          { id: "about", label: "Info", icon: Icons.information }
      ]
-@@ -722,6 +735,149 @@ StyledRect {
+@@ -722,6 +735,150 @@ StyledRect {
                      }
                  }
  
@@ -341,7 +341,8 @@ index edc8ac8..25c30c9 100644
 +                            variant: "text"
 +                            icon: Icons.textBox
 +                            text: "recoll"
-+                            onClicked: Quickshell.execDetached(["recoll"])
++                            // --disable-gpu: QtWebEngine crasha (SIGSEGV in libgallium) su GPU ibrida Wayland
++                            onClicked: Quickshell.execDetached(["env", "QTWEBENGINE_CHROMIUM_FLAGS=--disable-gpu --disable-gpu-compositing", "recoll"])
 +                        }
 +                    }
 +                    StyledText {

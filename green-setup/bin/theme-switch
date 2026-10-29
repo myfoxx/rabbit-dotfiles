@@ -169,7 +169,7 @@ p=sys.argv[1]; s=open(p).read()
 s=s.replace(
     'hl.bind(mainMod .. " + SPACE",          hl.dsp.exec_cmd("env GTK_THEME=Adwaita:dark fsearch")) -- [green-patch-space] ricerca file',
     'hl.bind(mainMod .. " + SPACE",          hl.dsp.exec_cmd("env GTK_THEME=Adwaita:dark fsearch")) -- [green-patch-space] ricerca file\n'
-    'hl.bind(mainMod .. " + SHIFT + SPACE",  hl.dsp.exec_cmd("recoll")) -- [green-patch-recoll] full-text documenti',
+    'hl.bind(mainMod .. " + SHIFT + SPACE",  hl.dsp.exec_cmd("env QTWEBENGINE_CHROMIUM_FLAGS=--disable-gpu recoll")) -- [green-patch-recoll] full-text documenti',
     1)
 open(p,'w').write(s); print("hyprland.lua: SUPER+SHIFT+SPACE = recoll (full-text)")
 PY
@@ -184,7 +184,9 @@ patch_launcher_filesearch() {
     # Applica ricerca-file nel launcher + tab "Ricerca" nelle impostazioni.
     # Un solo patch-diff (green-setup/patches/search-tab.patch) invece di decine di string-replace:
     # tocca shell/{config/Settings.qml, modules/launcher/Launcher.qml, modules/settings/SettingsPanel.qml}.
-    local P="$RABBIT/green-setup/patches/search-tab.patch"
+    # patch fuori dal repo (sopravvive ai checkout di branch / reset di dotup su main)
+    local P="$HOME/.local/share/rabbit-patches/search-tab.patch"
+    [ -f "$P" ] || P="$RABBIT/green-setup/patches/search-tab.patch"
     local L="$RABBIT/shell/modules/launcher/Launcher.qml"
     [ -f "$L" ] || { echo "launcher: $L assente, salto"; return 0; }
     if grep -q "searchExcludes" "$L" 2>/dev/null; then
